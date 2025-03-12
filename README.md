@@ -96,7 +96,7 @@ Note that when creating a layer, you need to select "Compatible runtimes" as you
 1. Create a new HTTP API
 2. Add a new integration with your Lambda function
 3. Choose "Method" as ANY for simplicity, the "Resource path" like "/my_api", and "Integration target" as your Lambda function name
-4. Keep Stage name ad "$default" and "Auto-deployed" selected
+4. Keep Stage name as "$default" and "Auto-deployed" selected
 5. Get webhook info by using this url https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo
 6. Add webhook by using this url https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<API_GATEWAY_URL>
 7. (Optional) Delete webhook by using this url https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook
@@ -159,7 +159,7 @@ The Secrets Manager policy looks like this:
 	"Version": "2012-10-17",
 	"Statement": [
 		{
-			"Sid": "VisualEditor0",
+			"Sid": "SecretManagerAccess",
 			"Effect": "Allow",
 			"Action": "secretsmanager:GetSecretValue",
 			"Resource": "arn:aws:secretsmanager:*:*:secret:Telegram-bot-token-*"
