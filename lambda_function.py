@@ -85,7 +85,7 @@ def generate_presigned_url(file_name):
     try:
         url = s3.generate_presigned_url('get_object',
                                         Params={'Bucket': S3_YT_VIDEOS_BUCKET_NAME, 'Key': file_name},
-                                        ExpiresIn=3600)
+                                        ExpiresIn=86400)  # 24 hours
         return url
     except ClientError as e:
         print(f"*** Error generating presigned URL: {e}")
