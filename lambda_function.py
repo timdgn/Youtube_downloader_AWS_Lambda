@@ -17,17 +17,24 @@ BOT_SECRET_NAME = "Telegram-bot-token"
 BOT_SECRET_KEY = "bot_token"
 
 HELP_MESSAGE = """
-    📚 Commandes disponibles:
+📚 Commandes disponibles:
 
-    /list - Lister toutes tes vidéos dans le serveur
-    /delete nom_du_fichier.zip - Supprimer une vidéo spécifique
-    /help - Afficher cette aide
+/start - Démarrer le bot
+/list - Lister toutes tes vidéos dans le serveur
+/delete nom_du_fichier.zip - Supprimer une vidéo spécifique
+/help - Afficher cette aide
 
-    Pour télécharger une vidéo YouTube:
-    [URL] [résolution]
+Pour télécharger une vidéo YouTube:
+"[URL] [résolution]"
 
-    Résolutions disponibles: low, medium, high, veryhigh
-    Exemple: https://www.youtube.com/watch?v=example medium
+Résolutions disponibles:
+• low - qualité basse (240p)
+• medium - qualité moyenne (480p)
+• high - qualité haute (720p)
+• veryhigh - qualité très haute (1080p)
+
+Exemple:
+"https://www.youtube.com/watch?v=example medium"
     """
 FORMATS = {
     "low": "bestvideo[height<=240][ext=mp4]+bestaudio",
