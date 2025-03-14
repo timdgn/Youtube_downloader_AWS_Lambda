@@ -348,9 +348,6 @@ def lambda_handler(event, context):
             send_message(chat_id, HELP_MESSAGE)
             return {'statusCode': 200, 'body': json.dumps('Invalid resolution')}
 
-        # Send immediate acknowledgment
-        send_message(chat_id, "Ta demande a été reçue, je commence le téléchargement... 🛠️")
-
         # Invoke the same Lambda function asynchronously to process the video
         payload = {
             'type': 'process_video',
