@@ -231,9 +231,54 @@ def delete_s3_video(file_name):
         return False
 
 
+def process_video_download(chat_id, url, resolution):
+    """
+    Function to handle the video download process asynchronously
+    """
+
+    send_message(chat_id, "Téléchargement en cours, ça arrive ... 🔄")
+    file_path = download_video(url, resolution)
+
+    if file_path:
+        file_name = os.path.basename(file_path)
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        msg = f"Je t'envoie '{file_name}' en résolution {resolution} ({file_size_mb:.2f} MB), ça arrive... 📲"
+        send_message(chat_id, msg)
+        send_video_or_link(chat_id, file_path)
+    else:
+        send_message(chat_id, "Échec du téléchargement 🤕 Réessaye !")
+
+
+def invoke_lambda_async(payload):
+    """
+    Invoke the same Lambda function asynchronously to process the video download
+    """
+    lambda_client = boto3.client('lambda')
+    lambda_client.invoke(
+        FunctionName=os.environ.get('AWS_LAMBDA_FUNCTION_NAME'),
+        InvocationType='Event',  # Asynchronous invocation
+        Payload=json.dumps(payload)
+    )
+
+
 def lambda_handler(event, context):
+
+    global BOT_TOKEN
+    BOT_TOKEN = get_secret_bot_token()
+    print(f"*** Bot Token : {BOT_TOKEN}")
+
     print(f"*** Event : {event}")
-    body = json.loads(event['body'])
+
+    # Check if this is an async video processing invocation
+    if event.get('type') == 'process_video':
+        chat_id = event.get('chat_id')
+        url = event.get('url')
+        resolution = event.get('resolution')
+        process_video_download(chat_id, url, resolution)
+        return {'statusCode': 200, 'body': json.dumps('Video processing completed')}
+
+    # Regular webhook handling
+    body = json.loads(event.get('body', '{}'))
     print(f"*** Body : {body}")
 
     try:
@@ -245,10 +290,6 @@ def lambda_handler(event, context):
             message_text = body['edited_message']['text']
         except KeyError:
             return {'statusCode': 200, 'body': json.dumps('Invalid message format')}
-
-    global BOT_TOKEN
-    BOT_TOKEN = get_secret_bot_token()
-    print(f"*** Bot Token : {BOT_TOKEN}")
 
     # strip message_text
     message_text = message_text.strip()
@@ -262,10 +303,9 @@ def lambda_handler(event, context):
             for i, video in enumerate(videos, 1):
                 message += f"{i} - {video}\n\n"
             send_message(chat_id, message)
-            return {'statusCode': 200, 'body': json.dumps('List command processed')}
         else:
             send_message(chat_id, "Aucune vidéo disponible, rien, nada 🧹")
-            return {'statusCode': 200, 'body': json.dumps('List command processed')}
+        return {'statusCode': 200, 'body': json.dumps('List command processed')}
 
     # Command: /delete filename.zip - Delete a specific video
     elif message_text.startswith('/delete'):
@@ -282,7 +322,7 @@ def lambda_handler(event, context):
                 return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
         else:
             send_message(chat_id, "❌ Indique le nom du fichier à supprimer, par exemple /delete Video.zip")
-            return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
+        return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
 
     # Command: /help or /start - Show available commands
     elif message_text.startswith('/help') or message_text.startswith('/start'):
@@ -308,16 +348,16 @@ def lambda_handler(event, context):
             send_message(chat_id, HELP_MESSAGE)
             return {'statusCode': 200, 'body': json.dumps('Invalid resolution')}
 
-        send_message(chat_id, "Téléchargement en cours, ça arrive ... 🔄")
-        file_path = download_video(url, resolution)
+        # Send immediate acknowledgment
+        send_message(chat_id, "Ta demande a été reçue, je commence le téléchargement... 🛠️")
 
-        if file_path:
-            file_name = os.path.basename(file_path)
-            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            msg = f"Je t'envoie '{file_name}' en résolution {resolution} ({file_size_mb:.2f} MB), ça arrive... 📲"
-            send_message(chat_id, msg)
-            send_video_or_link(chat_id, file_path)
-            return {'statusCode': 200, 'body': json.dumps('Video downloaded successfully')}
-        else:
-            send_message(chat_id, "Échec du téléchargement 🤕 Réessaye !")
-            return {'statusCode': 200, 'body': json.dumps('Failed to download video')}
+        # Invoke the same Lambda function asynchronously to process the video
+        payload = {
+            'type': 'process_video',
+            'chat_id': chat_id,
+            'url': url,
+            'resolution': resolution
+        }
+        invoke_lambda_async(payload)
+
+        return {'statusCode': 200, 'body': json.dumps('Video download request received')}
