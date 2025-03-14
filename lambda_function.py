@@ -3,9 +3,9 @@ import json
 import subprocess
 import urllib3
 import boto3
+import zipfile
 from botocore.exceptions import ClientError
 from botocore.config import Config
-
 
 REGION_NAME = "us-east-1"
 S3_YT_VIDEOS_BUCKET_NAME = "yt-downloaded-videos"
@@ -20,7 +20,7 @@ HELP_MESSAGE = """
     📚 Commandes disponibles:
 
     /list - Lister toutes les vidéos dans le bucket S3
-    /delete nom_du_fichier.mp4 - Supprimer une vidéo spécifique
+    /delete nom_du_fichier.zip - Supprimer une vidéo spécifique
     /help - Afficher cette aide
 
     Pour télécharger une vidéo YouTube:
@@ -66,9 +66,26 @@ def send_message(chat_id, message):
     HTTP.request('POST', url, body=encoded_data, headers={'Content-Type': 'application/json'})
 
 
+def zip_file(file_path):
+    """
+    Create a zip file from the downloaded video
+    """
+    file_name = os.path.basename(file_path)
+    zip_file_path = os.path.join(WORKING_DIR, f"{os.path.splitext(file_name)[0]}.zip")
+
+    try:
+        with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            zipf.write(file_path, arcname=file_name)
+        print(f"*** Successfully zipped file: {zip_file_path}")
+        return zip_file_path
+    except Exception as e:
+        print(f"*** Error zipping file: {e}")
+        return None
+
+
 def upload_video_to_s3(file_path):
     s3 = boto3.client('s3')
-    
+
     file_name = os.path.basename(file_path)
     try:
         s3.upload_file(file_path, S3_YT_VIDEOS_BUCKET_NAME, file_name)
@@ -76,7 +93,7 @@ def upload_video_to_s3(file_path):
     except ClientError as e:
         print(f"*** Error uploading file to S3: {e}")
         return None
-    
+
     return file_name
 
 
@@ -106,17 +123,32 @@ def send_video_or_link(chat_id, file_path):
         fields = {"chat_id": str(chat_id), "video": (file_name, video_data, "video/mp4")}
         response = HTTP.request('POST', url_video, fields=fields)
         print(f"*** Response of the POST request: {response.data}")
-    
-    # If the file size is 50MB or more, upload it to S3 and send the link
+
+    # If the file size is 50MB or more, zip it, upload to S3 and send the link
     else:
-        print(f"*** File is {file_size_mb:.2f}MB, uploading to S3 and sending link")
-        file_s3_name = upload_video_to_s3(file_path)
-        if file_s3_name:
+        print(f"*** File is {file_size_mb:.2f}MB, zipping, uploading to S3 and sending link")
+
+        # Zip the file
+        zip_file_path = zip_file(file_path)
+
+        # Upload the zipped file to S3
+        zip_file_name = upload_video_to_s3(zip_file_path)
+        if zip_file_name:
             # Generate a pre-signed URL
-            file_url = generate_presigned_url(file_s3_name)
+            file_url = generate_presigned_url(zip_file_name)
             if file_url:
-                msg = f"Et voici ta vidéo 🍿\n\n{file_url}"
+                msg = f"Et voici ta vidéo (en fichier zip) 🍿\n\n{file_url}"
                 send_message(chat_id, msg)
+                print("*** Video uploaded to S3 and link sent to user")
+            else:
+                print("*** Failed to generate pre-signed URL")
+                send_message(chat_id, "Désolé, il y a une erreur lors de la création de l'URL de téléchargement 🥲")
+
+            # Clean up the zip file
+            os.remove(zip_file_path)
+        else:
+            print("*** Failed to upload video to S3")
+            send_message(chat_id, "Désolé, il y a une erreur lors de l'envoi de la vidéo au serveur 🥲")
 
     # Clean up after sending the video
     os.remove(file_path)
@@ -139,7 +171,7 @@ def download_video(url, resolution):
         "--ffmpeg-location", FFMPEG_PATH,
         "--merge-output-format", "mp4",
         url]
-    
+
     print("*** Executing command:", " ".join(command_download))
     process = subprocess.run(command_download, capture_output=True, text=True)
     print(process.stdout)
@@ -187,10 +219,10 @@ def delete_s3_video(file_name):
         # Vérifier si le fichier existe
         response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Prefix=file_name)
         file_exists = 'Contents' in response and len(response['Contents']) > 0
-        
+
         if not file_exists:
             return False
-            
+
         # Le fichier existe, on peut le supprimer
         s3.delete_object(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Key=file_name)
         return True
@@ -203,7 +235,7 @@ def lambda_handler(event, context):
     print(f"*** Event : {event}")
     body = json.loads(event['body'])
     print(f"*** Body : {body}")
-    
+
     try:
         chat_id = body['message']['chat']['id']
         message_text = body['message']['text']
@@ -234,11 +266,11 @@ def lambda_handler(event, context):
         else:
             send_message(chat_id, "Aucune vidéo disponible, rien, nada 🧹")
             return {'statusCode': 200, 'body': json.dumps('List command processed')}
-    
-    # Command: /delete filename.mp4 - Delete a specific video
+
+    # Command: /delete filename.zip - Delete a specific video
     elif message_text.startswith('/delete'):
         parts = message_text.split(maxsplit=1)  # keep maxsplit=1 because filenames can have spaces
-        
+
         if len(parts) > 1:
             file_name = parts[1].strip()
             success = delete_s3_video(file_name)
@@ -249,21 +281,21 @@ def lambda_handler(event, context):
                 send_message(chat_id, f"❌ Impossible de supprimer '{file_name}', vérifie le nom du fichier 🧐")
                 return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
         else:
-            send_message(chat_id, "❌ Indique le nom du fichier à supprimer, par exemple /delete Vidéo.mp4")
+            send_message(chat_id, "❌ Indique le nom du fichier à supprimer, par exemple /delete Video.zip")
             return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
-    
+
     # Command: /help or /start - Show available commands
     elif message_text.startswith('/help') or message_text.startswith('/start'):
         send_message(chat_id, HELP_MESSAGE)
         return {'statusCode': 200, 'body': json.dumps('Help command processed')}
-    
+
     # Standard video download command
     else:
         parts = message_text.strip().split()
         if len(parts) != 2:
             send_message(chat_id, HELP_MESSAGE)
             return {'statusCode': 200, 'body': json.dumps('Invalid input')}
-        
+
         url, resolution = parts[0], parts[1].lower()
         print(f"*** URL : {url}")
         print(f"*** resolution : {resolution}")
@@ -278,7 +310,7 @@ def lambda_handler(event, context):
 
         send_message(chat_id, "Téléchargement en cours, ça arrive ... 🔄")
         file_path = download_video(url, resolution)
-        
+
         if file_path:
             file_name = os.path.basename(file_path)
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
