@@ -239,14 +239,17 @@ def lambda_handler(event, context):
     elif message_text.startswith('/delete'):
         parts = message_text.split(maxsplit=1)  # keep maxsplit=1 because filenames can have spaces
         
-        file_name = parts[1]
-        success = delete_s3_video(file_name)
-        
-        if success:
-            send_message(chat_id, f"✅ Vidéo '{file_name}' supprimée, c'est ciao 🫡")
-            return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
+        if len(parts) > 1:
+            file_name = parts[1].strip()
+            success = delete_s3_video(file_name)
+            if success:
+                send_message(chat_id, f"✅ Vidéo '{file_name}' supprimée, c'est ciao 🫡")
+                return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
+            else:
+                send_message(chat_id, f"❌ Impossible de supprimer '{file_name}', vérifie le nom du fichier 🧐")
+                return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
         else:
-            send_message(chat_id, f"❌ Impossible de supprimer '{file_name}', vérifie le nom du fichier 🧐")
+            send_message(chat_id, "❌ Indique le nom du fichier à supprimer, par exemple /delete Vidéo.mp4")
             return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
     
     # Command: /help or /start - Show available commands
@@ -265,7 +268,7 @@ def lambda_handler(event, context):
         print(f"*** URL : {url}")
         print(f"*** resolution : {resolution}")
 
-        if url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ":
+        if "dQw4w9WgXcQ" in url:
             send_message(chat_id, "Même pas la peine d'y penser 🤨")
             return {'statusCode': 200, 'body': json.dumps('Invalid URL')}
 
