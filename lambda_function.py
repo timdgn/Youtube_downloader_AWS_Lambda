@@ -19,7 +19,7 @@ BOT_SECRET_KEY = "bot_token"
 HELP_MESSAGE = """
     📚 Commandes disponibles:
 
-    /list - Lister toutes les vidéos dans le bucket S3
+    /list - Lister toutes tes vidéos dans le serveur
     /delete nom_du_fichier.zip - Supprimer une vidéo spécifique
     /help - Afficher cette aide
 
@@ -83,25 +83,34 @@ def zip_file(file_path):
         return None
 
 
-def upload_video_to_s3(file_path):
+def get_s3_key(chat_id, file_name):
+    """
+    Generate the S3 key using chat_id as folder structure
+    """
+    return f"{chat_id}/{file_name}"
+
+
+def upload_video_to_s3(file_path, chat_id):
     s3 = boto3.client('s3')
 
     file_name = os.path.basename(file_path)
+    s3_key = get_s3_key(chat_id, file_name)
+
     try:
-        s3.upload_file(file_path, S3_YT_VIDEOS_BUCKET_NAME, file_name)
-        print(f"*** Successfully uploaded to S3: {file_name}")
+        s3.upload_file(file_path, S3_YT_VIDEOS_BUCKET_NAME, s3_key)
+        print(f"*** Successfully uploaded to S3: {s3_key}")
     except ClientError as e:
         print(f"*** Error uploading file to S3: {e}")
         return None
 
-    return file_name
+    return s3_key
 
 
-def generate_presigned_url(file_name):
+def generate_presigned_url(s3_key):
     s3 = boto3.client('s3', config=Config(signature_version='s3v4'))
     try:
         url = s3.generate_presigned_url('get_object',
-                                        Params={'Bucket': S3_YT_VIDEOS_BUCKET_NAME, 'Key': file_name},
+                                        Params={'Bucket': S3_YT_VIDEOS_BUCKET_NAME, 'Key': s3_key},
                                         ExpiresIn=86400)  # 24 hours
         return url
     except ClientError as e:
@@ -131,11 +140,11 @@ def send_video_or_link(chat_id, file_path):
         # Zip the file
         zip_file_path = zip_file(file_path)
 
-        # Upload the zipped file to S3
-        zip_file_name = upload_video_to_s3(zip_file_path)
-        if zip_file_name:
+        # Upload the zipped file to S3 with chat_id as folder
+        s3_key = upload_video_to_s3(zip_file_path, chat_id)
+        if s3_key:
             # Generate a pre-signed URL
-            file_url = generate_presigned_url(zip_file_name)
+            file_url = generate_presigned_url(s3_key)
             if file_url:
                 msg = f"Et voici ta vidéo (en fichier zip) 🍿\n\n{file_url}"
                 send_message(chat_id, msg)
@@ -189,19 +198,22 @@ def download_video(url, resolution):
     return None
 
 
-def list_s3_videos():
+def list_s3_videos(chat_id):
     """
-    List all videos in the S3 bucket
+    List all videos in the S3 bucket for the specific chat_id
     """
     s3 = boto3.client('s3')
     try:
-        response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME)
+        # List objects with prefix of chat_id/
+        response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Prefix=f"{chat_id}/")
         if 'Contents' in response:
             videos = []
             for obj in response['Contents']:
                 key = obj['Key']
+                # Extract just the filename (without the chat_id/ prefix)
+                file_name = key.split('/', 1)[1]
                 size_mb = obj['Size'] / (1024 * 1024)  # Convert to MB
-                videos.append(f"{key} ({size_mb:.2f} MB)")
+                videos.append(f"{file_name} ({size_mb:.2f} MB)")
             return videos
         else:
             return []
@@ -210,21 +222,23 @@ def list_s3_videos():
         return None
 
 
-def delete_s3_video(file_name):
+def delete_s3_video(chat_id, file_name):
     """
-    Delete a specific video from the S3 bucket
+    Delete a specific video from the S3 bucket for the specific chat_id
     """
     s3 = boto3.client('s3')
+    s3_key = get_s3_key(chat_id, file_name)
+
     try:
         # Vérifier si le fichier existe
-        response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Prefix=file_name)
+        response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Prefix=s3_key)
         file_exists = 'Contents' in response and len(response['Contents']) > 0
 
         if not file_exists:
             return False
 
         # Le fichier existe, on peut le supprimer
-        s3.delete_object(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Key=file_name)
+        s3.delete_object(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Key=s3_key)
         return True
     except ClientError as e:
         print(f"*** Error deleting S3 object: {e}")
@@ -262,7 +276,6 @@ def invoke_lambda_async(payload):
 
 
 def lambda_handler(event, context):
-
     global BOT_TOKEN
     BOT_TOKEN = get_secret_bot_token()
     print(f"*** Bot Token : {BOT_TOKEN}")
@@ -295,11 +308,11 @@ def lambda_handler(event, context):
     message_text = message_text.strip()
     print(f"*** Message Text : {message_text}")
 
-    # Command: /list - List all videos in S3 bucket
+    # Command: /list - List all videos in S3 bucket for this user
     if message_text.startswith('/list'):
-        videos = list_s3_videos()
+        videos = list_s3_videos(chat_id)
         if videos:
-            message = "📋 Vidéos disponibles:\n\n"
+            message = "📋 Vos vidéos disponibles:\n\n"
             for i, video in enumerate(videos, 1):
                 message += f"{i} - {video}\n\n"
             send_message(chat_id, message)
@@ -313,7 +326,7 @@ def lambda_handler(event, context):
 
         if len(parts) > 1:
             file_name = parts[1].strip()
-            success = delete_s3_video(file_name)
+            success = delete_s3_video(chat_id, file_name)
             if success:
                 send_message(chat_id, f"✅ Vidéo '{file_name}' supprimée, c'est ciao 🫡")
                 return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
