@@ -17,23 +17,23 @@ BOT_SECRET_NAME = "Telegram-bot-token"
 BOT_SECRET_KEY = "bot_token"
 
 HELP_MESSAGE = """
-📚 Commandes disponibles:
+📚 Available commands:
 
-/start - Démarrer le bot
-/list - Lister toutes tes vidéos dans le serveur
-/delete nom_du_fichier.zip - Supprimer une vidéo spécifique
-/help - Afficher cette aide
+/start - Start the bot
+/list - List all your videos on the server
+/delete filename.zip - Delete a specific video
+/help - Display this help
 
-Pour télécharger une vidéo YouTube:
-"[URL] [résolution]"
+To download a YouTube video:
+"[URL] [resolution]"
 
-Résolutions disponibles:
-• low - qualité basse (240p)
-• medium - qualité moyenne (480p)
-• high - qualité haute (720p)
-• veryhigh - qualité très haute (1080p)
+Available resolutions:
+• low - low quality (240p)
+• medium - medium quality (480p)
+• high - high quality (720p)
+• veryhigh - very high quality (1080p)
 
-Exemple:
+Example:
 "https://www.youtube.com/watch?v=example medium"
     """
 FORMATS = {
@@ -153,18 +153,18 @@ def send_video_or_link(chat_id, file_path):
             # Generate a pre-signed URL
             file_url = generate_presigned_url(s3_key)
             if file_url:
-                msg = f"Et voici ta vidéo (en fichier zip) 🍿\n\n{file_url}"
+                msg = f"Here's your video (as a zip file) 🍿\n\n{file_url}"
                 send_message(chat_id, msg)
                 print("*** Video uploaded to S3 and link sent to user")
             else:
                 print("*** Failed to generate pre-signed URL")
-                send_message(chat_id, "Désolé, il y a une erreur lors de la création de l'URL de téléchargement 🥲")
+                send_message(chat_id, "Sorry, there was an error creating the download URL 🥲")
 
             # Clean up the zip file
             os.remove(zip_file_path)
         else:
             print("*** Failed to upload video to S3")
-            send_message(chat_id, "Désolé, il y a une erreur lors de l'envoi de la vidéo au serveur 🥲")
+            send_message(chat_id, "Sorry, there was an error sending the video to the server 🥲")
 
     # Clean up after sending the video
     os.remove(file_path)
@@ -237,14 +237,14 @@ def delete_s3_video(chat_id, file_name):
     s3_key = get_s3_key(chat_id, file_name)
 
     try:
-        # Vérifier si le fichier existe
+        # Check if the file exists
         response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Prefix=s3_key)
         file_exists = 'Contents' in response and len(response['Contents']) > 0
 
         if not file_exists:
             return False
 
-        # Le fichier existe, on peut le supprimer
+        # The file exists, we can delete it
         s3.delete_object(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Key=s3_key)
         return True
     except ClientError as e:
@@ -257,17 +257,17 @@ def process_video_download(chat_id, url, resolution):
     Function to handle the video download process asynchronously
     """
 
-    send_message(chat_id, "Téléchargement en cours, ça arrive ... 🔄")
+    send_message(chat_id, "Download in progress, please wait... 🔄")
     file_path = download_video(url, resolution)
 
     if file_path:
         file_name = os.path.basename(file_path)
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        msg = f"Je t'envoie '{file_name}' en résolution {resolution} ({file_size_mb:.2f} MB), ça arrive... 📲"
+        msg = f"Sending you '{file_name}' in {resolution} resolution ({file_size_mb:.2f} MB), coming soon... 📲"
         send_message(chat_id, msg)
         send_video_or_link(chat_id, file_path)
     else:
-        send_message(chat_id, "Échec du téléchargement 🤕 Réessaye !")
+        send_message(chat_id, "Download failed 🤕 Please try again!")
 
 
 def invoke_lambda_async(payload):
@@ -319,12 +319,12 @@ def lambda_handler(event, context):
     if message_text.startswith('/list'):
         videos = list_s3_videos(chat_id)
         if videos:
-            message = "📋 Vos vidéos disponibles:\n\n"
+            message = "📋 Your available videos:\n\n"
             for i, video in enumerate(videos, 1):
                 message += f"{i} - {video}\n\n"
             send_message(chat_id, message)
         else:
-            send_message(chat_id, "Aucune vidéo disponible, rien, nada 🧹")
+            send_message(chat_id, "No videos available, nothing, nada 🧹")
         return {'statusCode': 200, 'body': json.dumps('List command processed')}
 
     # Command: /delete filename.zip - Delete a specific video
@@ -335,13 +335,13 @@ def lambda_handler(event, context):
             file_name = parts[1].strip()
             success = delete_s3_video(chat_id, file_name)
             if success:
-                send_message(chat_id, f"✅ Vidéo '{file_name}' supprimée, c'est ciao 🫡")
+                send_message(chat_id, f"✅ Video '{file_name}' deleted, c'est ciao 🫡")
                 return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
             else:
-                send_message(chat_id, f"❌ Impossible de supprimer '{file_name}', vérifie le nom du fichier 🧐")
+                send_message(chat_id, f"❌ Unable to delete '{file_name}', check the filename 🧐")
                 return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
         else:
-            send_message(chat_id, "❌ Indique le nom du fichier à supprimer, par exemple /delete Video.zip")
+            send_message(chat_id, "❌ Please specify the filename to delete, for example /delete Video.zip")
         return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
 
     # Command: /help or /start - Show available commands
@@ -361,7 +361,7 @@ def lambda_handler(event, context):
         print(f"*** resolution : {resolution}")
 
         if "dQw4w9WgXcQ" in url:
-            send_message(chat_id, "Même pas la peine d'y penser 🤨")
+            send_message(chat_id, "Don't even think about it 🤨")
             return {'statusCode': 200, 'body': json.dumps('Invalid URL')}
 
         if resolution not in FORMATS.keys():
