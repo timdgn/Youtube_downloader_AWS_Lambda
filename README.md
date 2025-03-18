@@ -2,6 +2,8 @@
 
 A Telegram bot powered by AWS Lambda that allows users to download YouTube videos in different qualities and send them directly via Telegram or through a presigned S3 download link for larger files.
 
+<img src="docs/Preview.png" width=25%>
+
 ## 🌟 Features
 
 - Download YouTube videos in 4 different resolutions (240p, 480p, 720p, 1080p)
