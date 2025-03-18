@@ -54,11 +54,11 @@ The bot is built with:
 
 ### 👷 Lambda function
 
-Create a Lambda function (Adapt the GLOBAL VARIABLES in the beginning of the file)
+Create an AWS Lambda function and upload the code from `lambda_function.py` (Adapt the GLOBAL VARIABLES in the beginning of the file)
 
 ### 🛠️ Add layers containing yt-dlp and FFmpeg
 
-To create an AWS Lambda layer for yt-dlp, follow these steps:
+To create a Lambda layer for yt-dlp, follow these steps:
 
 1. Create a new directory for the layer:
    ```bash
@@ -85,9 +85,9 @@ To create an AWS Lambda layer for yt-dlp, follow these steps:
    zip -r yt-dlp-layer.zip bin
    ```
 
-6. Upload the zip file to AWS Lambda as a new layer and assign it to your Lambda function.
+6. Upload the zip file to Lambda as a new layer and assign it to your Lambda function.
 
-For the FFmpeg layer, follow the steps of this tutorial [here](https://virkud-sarvesh.medium.com/building-ffmpeg-layer-for-a-lambda-function-a206f36d3edc) but instead of storing in S3, upload the final zip file to AWS Lambda as a new layer and assign it to your Lambda function.
+For the FFmpeg layer, follow the steps of this tutorial [here](https://virkud-sarvesh.medium.com/building-ffmpeg-layer-for-a-lambda-function-a206f36d3edc) but instead of storing in S3, upload the final zip file to Lambda as a new layer and assign it to your Lambda function.
 
 Note that when creating a layer, you need to select "Compatible runtimes" as your python version you are using across your AWS services for this project.
 
@@ -106,9 +106,9 @@ Note that when creating a layer, you need to select "Compatible runtimes" as you
 Yt-dlp sometimes needs cookies to work
 
 1. Export your youtube cookies with a Chrome extention like "Get cookies.txt LOCALLY"
-2. Create a new bucket in your AWS account
+2. Create a new S3 bucket to store the cookies file
 3. Upload the youtube cookies .txt file to the bucket
-4. Adapt the lambda_function.py file to use the bucket name and file key (i.e. the path in the bucket)
+4. Adapt the `lambda_function.py` file to use the bucket name and file key (i.e. the path in the bucket)
 
 Create an S3 bucket to store downloaded videos that are larger than 50MB.
 
@@ -165,6 +165,21 @@ The Secrets Manager policy looks like this:
 			"Resource": "arn:aws:secretsmanager:*:*:secret:Telegram-bot-token-*"
 		}
 	]
+}
+```
+
+The Lambda policy (for the Lambda function to be able to invoke itself) looks like this:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": "lambda:InvokeFunction",
+            "Resource": "arn:aws:lambda:{aws_region}:{aws_account_id}:function:yt_dl_bot_lambda_function"
+        }
+    ]
 }
 ```
 
