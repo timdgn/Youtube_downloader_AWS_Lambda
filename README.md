@@ -1,40 +1,48 @@
 # YouTube Downloader for Telegram
 
-A Telegram bot powered by AWS Lambda that allows users to download YouTube videos in different qualities and send them directly via Telegram or through a presigned S3 download link for larger files.
+A Telegram bot powered by AWS Lambda that allows users to download YouTube videos in different qualities, download audio from YouTube videos in MP3 format, and send them directly via Telegram or through a presigned S3 download link for larger files.
 
 <img src="docs/Preview.png" width=25%>
 
 ## 🌟 Features
 
 - Download YouTube videos in 4 different resolutions (240p, 480p, 720p, 1080p)
-- Direct sending of videos under 50 MB via Telegram
-- Automatic storage on AWS S3 and generation of presigned links for videos over 50 MB
+- Download audio from YouTube videos in MP3 format
+- Direct sending of videos/audio under 50 MB via Telegram
+- Automatic storage on AWS S3 and generation of presigned links for files over 50 MB
 - YouTube cookies management to access age-restricted content
-- Commands to list and delete stored videos
+- Commands to list and delete stored videos/audios
 
 ## 📋 Available Commands
 
 - `/start` - Start the bot
-- `/list` - List all videos stored in the S3 bucket
-- `/delete filename.mp4` - Delete a specific video from the S3 bucket
+- `/list` - List all the videos/audios stored in the S3 bucket
+- `/delete filename.zip` - Delete a specific video/audio from the S3 bucket
 - `/help` - Display help with all available commands
 
-To download a video, simply send:
+To download a video/audio, simply send:
 ```
 [YouTube URL] [resolution]
 ```
 
-## 🏞️ Available resolutions:
+## 🎥 Available resolutions and formats:
 
 - `low` (240p)
 - `medium` (480p)
 - `high` (720p)
 - `veryhigh` (1080p)
+- `mp3` (audio only)
 
-## 📝 Example:
+## 📝 Examples:
 
+For video:
 ```
 https://www.youtube.com/watch?v=example medium
+```
+
+For audio only:
+```
+https://www.youtube.com/watch?v=example mp3
 ```
 
 ## 🏗️ Architecture
