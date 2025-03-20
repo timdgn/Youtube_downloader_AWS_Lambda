@@ -69,7 +69,7 @@ def get_secret_bot_token():
 
 
 def send_message(chat_id, message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{get_secret_bot_token()}/sendMessage"
     data = {"chat_id": chat_id, "text": message}
     encoded_data = json.dumps(data).encode('utf-8')
     HTTP.request('POST', url, body=encoded_data, headers={'Content-Type': 'application/json'})
@@ -144,12 +144,12 @@ def send_video_or_link(chat_id, file_path, first_name=None, last_name=None):
     if file_size_mb < 50:
         print(f"*** File is {file_size_mb:.2f}MB, sending directly")
         if file_name.endswith('.mp3'):
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendAudio"
+            url = f"https://api.telegram.org/bot{get_secret_bot_token()}/sendAudio"
             with open(file_path, 'rb') as audio:
                 audio_data = audio.read()
             fields = {"chat_id": str(chat_id), "audio": (file_name, audio_data, "audio/mp3")}
         else:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendVideo"
+            url = f"https://api.telegram.org/bot{get_secret_bot_token()}/sendVideo"
             with open(file_path, 'rb') as video:
                 video_data = video.read()
             fields = {"chat_id": str(chat_id), "video": (file_name, video_data, "video/mp4")}
@@ -320,9 +320,8 @@ def invoke_lambda_async(payload):
 
 
 def lambda_handler(event, context):
-    global BOT_TOKEN
-    BOT_TOKEN = get_secret_bot_token()
-    print(f"*** Bot Token : {BOT_TOKEN}")
+
+    print(f"*** Bot Token : {get_secret_bot_token()}")
 
     print(f"*** Event : {event}")
 
