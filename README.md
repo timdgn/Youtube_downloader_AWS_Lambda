@@ -50,7 +50,7 @@ https://www.youtube.com/watch?v=example mp3
 The bot is built with:
 - AWS Lambda for code execution
 - AWS Lambda layers for yt-dlp and FFmpeg
-- AWS S3 for vides and cookies storage
+- AWS S3 for video/audio files and cookies storage
 - AWS Secrets Manager for securely managing the Telegram bot token
 - AWS API Gateway for the Telegram webhook
 - AWS IAM for managing permissions
