@@ -50,7 +50,10 @@ https://www.youtube.com/watch?v=example mp3
 The bot is built with:
 - AWS Lambda for code execution
 - AWS Lambda layers for yt-dlp and FFmpeg
-- AWS S3 for video/audio files and cookies storage
+- AWS S3 for:
+  - Video/audio files storage
+  - Cookies storage
+  - User message history storage
 - AWS Secrets Manager for securely managing the Telegram bot token
 - AWS API Gateway for the Telegram webhook
 - AWS IAM for managing permissions
@@ -113,14 +116,17 @@ Note that when creating a layer, you need to select "Compatible runtimes" as you
 
 ### 🪣 S3 bucket for Cookies and stored youtube videos
 
-Yt-dlp sometimes needs cookies to work
+You'll need three S3 buckets:
+1. A bucket for YouTube cookies (needed for yt-dlp to work)
+2. A bucket for storing downloaded videos that are larger than 50MB
+3. A bucket for storing user message history
+
+For the cookies bucket (Yt-dlp sometimes needs cookies to work):
 
 1. Export your youtube cookies with a Chrome extention like "Get cookies.txt LOCALLY"
 2. Create a new S3 bucket to store the cookies file
 3. Upload the youtube cookies .txt file to the bucket
 4. Adapt the `lambda_function.py` file to use the bucket name and file key (i.e. the path in the bucket)
-
-Create an S3 bucket to store downloaded videos that are larger than 50MB.
 
 ### 🛡️ IAM Permissions
 
@@ -132,13 +138,13 @@ The S3 policy looks like this:
 	"Version": "2012-10-17",
 	"Statement": [
 		{
-			"Sid": "S3Access",
+			"Sid": "S3DLVideosBucket",
 			"Effect": "Allow",
 			"Action": "s3:ListBucket",
 			"Resource": "arn:aws:s3:::yt-downloaded-videos"
 		},
 		{
-			"Sid": "S3ObjectAccessDlVideos",
+			"Sid": "S3DLVideosBucketObjectAccess",
 			"Effect": "Allow",
 			"Action": [
 				"s3:PutObject",
@@ -150,13 +156,30 @@ The S3 policy looks like this:
 			]
 		},
 		{
-			"Sid": "S3ObjectAccessCookies",
+			"Sid": "S3CookiesBucketObjectAccess",
 			"Effect": "Allow",
 			"Action": [
 				"s3:GetObject"
 			],
 			"Resource": [
 				"arn:aws:s3:::yt-cookies/youtube_cookies.txt"
+			]
+		},
+		{
+			"Sid": "S3MessageHistoryBucket",
+			"Effect": "Allow",
+			"Action": "s3:ListBucket",
+			"Resource": "arn:aws:s3:::yt-user-message-history"
+		},
+		{
+			"Sid": "S3MessageHistoryBucketObjectAccess",
+			"Effect": "Allow",
+			"Action": [
+				"s3:PutObject",
+				"s3:GetObject"
+			],
+			"Resource": [
+				"arn:aws:s3:::yt-user-message-history/*"
 			]
 		}
 	]
