@@ -12,6 +12,7 @@ A Telegram bot powered by AWS Lambda that allows users to download YouTube video
 - Automatic storage on AWS S3 and generation of presigned links for files over 50 MB
 - YouTube cookies management to access age-restricted content
 - Commands to list and delete stored videos/audios
+- Message history tracking in AWS DynamoDB for user activity monitoring
 
 ## 📋 Available Commands
 
@@ -53,7 +54,7 @@ The bot is built with:
 - AWS S3 for:
   - Video/audio files storage
   - Cookies storage
-  - User message history storage
+- AWS DynamoDB for storing user message history and interactions
 - AWS Secrets Manager for securely managing the Telegram bot token
 - AWS API Gateway for the Telegram webhook
 - AWS IAM for managing permissions
@@ -127,6 +128,13 @@ For the cookies bucket (Yt-dlp sometimes needs cookies to work):
 2. Create a new S3 bucket to store the cookies file
 3. Upload the youtube cookies .txt file to the bucket
 4. Adapt the `lambda_function.py` file to use the bucket name and file key (i.e. the path in the bucket)
+
+### 📊 DynamoDB Table for Message History
+
+Create a new DynamoDB table:
+- Table name: `telegram_messages`
+- Partition key: `chat_id` (String)
+- Sort key: `timestamp` (String)
 
 ### 🛡️ IAM Permissions
 
@@ -216,7 +224,26 @@ The Lambda policy (for the Lambda function to be able to invoke itself) looks li
 }
 ```
 
+The DynamoDB policy looks like this:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:Scan"
+            ],
+            "Resource": "arn:aws:dynamodb:*:*:table/telegram_messages"
+        }
+    ]
+}
+```
+
 ## 📝 Notes
 
 - Files larger than 50MB are automatically stored on S3 and shared via a presigned link (valid for 1 hour), because Telegram API has a file size limit of 50MB
+- Message history is stored in DynamoDB and can be accessed using the `/history` command, even though it's hidden to the user by default in the help message
 - Debug using CloudWatch Log groups and Lambda function logs located in the Monitoring tab

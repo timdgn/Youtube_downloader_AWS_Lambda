@@ -11,12 +11,13 @@ from datetime import datetime
 REGION_NAME = "us-east-1"
 S3_YT_VIDEOS_BUCKET_NAME = "yt-downloaded-videos"
 S3_COOKIES_BUCKET_NAME = "yt-cookies"
-S3_MESSAGES_BUCKET_NAME = "yt-user-message-history"  # New bucket for message history
 S3_COOKIES_KEY = "youtube_cookies.txt"
 YT_DLP_PATH = "/opt/bin/yt-dlp"
 FFMPEG_PATH = "/opt/bin/ffmpeg"
 BOT_SECRET_NAME = "Telegram-bot-token"
 BOT_SECRET_KEY = "bot_token"
+DYNAMODB = boto3.resource('dynamodb')
+MESSAGES_TABLE = DYNAMODB.Table('telegram_messages')
 
 HELP_MESSAGE = """
 📚 Available commands:
@@ -77,75 +78,40 @@ def send_message(chat_id, message):
     HTTP.request('POST', url, body=encoded_data, headers={'Content-Type': 'application/json'})
 
 
-def save_message_to_s3(chat_id, message_text, first_name=None, last_name=None):
+def save_message_to_dynamodb(chat_id, message_text, first_name=None, last_name=None):
     """
-    Save the user's message to S3 under a chat_id folder with a timestamp.
+    Save the user's message to DynamoDB.
     """
-    s3 = boto3.client('s3')
-    timestamp = datetime.utcnow().isoformat()
-    file_name = f"{timestamp}.json"
-    folder_name = f"{chat_id}"
-    if first_name:
-        folder_name += f"_{first_name}"
-    if last_name:
-        folder_name += f"_{last_name}"
-    s3_key = f"{folder_name}/{file_name}"
-
-    message_data = {
-        "chat_id": chat_id,
-        "message_text": message_text,
-        "timestamp": timestamp,
-        "first_name": first_name,
-        "last_name": last_name
-    }
-
     try:
-        s3.put_object(
-            Bucket=S3_MESSAGES_BUCKET_NAME,
-            Key=s3_key,
-            Body=json.dumps(message_data),
-            ContentType='application/json'
+        item = {
+            'chat_id': f"{str(chat_id)}_{first_name}_{last_name}",
+            'timestamp': datetime.utcnow().isoformat(),
+            'message': message_text,
+            'user_info': {
+                'first_name': first_name,
+                'last_name': last_name
+            }
+        }
+        MESSAGES_TABLE.put_item(Item=item)
+        print(f"*** Message saved to DynamoDB for chat_id: {chat_id}")
+    except Exception as e:
+        print(f"*** Error saving message to DynamoDB: {e}")
+
+
+def get_message_history(chat_id, first_name, last_name, limit=25):
+    """
+    Retrieve the user's message history from DynamoDB, sorted by timestamp.
+    """
+    try:
+        response = MESSAGES_TABLE.query(
+            KeyConditionExpression='chat_id = :chat_id',
+            ExpressionAttributeValues={':chat_id': f"{str(chat_id)}_{first_name}_{last_name}"},
+            Limit=limit,
+            ScanIndexForward=False  # Get most recent first
         )
-        print(f"*** Message saved to S3: {s3_key}")
-    except ClientError as e:
-        print(f"*** Error saving message to S3: {e}")
-
-
-def list_message_history(chat_id, first_name=None, last_name=None, limit=25):
-    """
-    Retrieve the user's message history from S3, sorted by timestamp (most recent first).
-    """
-    s3 = boto3.client('s3')
-    prefix = f"{chat_id}"
-    if first_name:
-        prefix += f"_{first_name}"
-    if last_name:
-        prefix += f"_{last_name}"
-    prefix += "/"
-
-    try:
-        response = s3.list_objects_v2(Bucket=S3_MESSAGES_BUCKET_NAME, Prefix=prefix)
-        if 'Contents' not in response:
-            return []
-
-        # Sort messages by timestamp (extracted from key), most recent first
-        messages = []
-        for obj in response['Contents']:
-            s3_key = obj['Key']
-            try:
-                message_obj = s3.get_object(Bucket=S3_MESSAGES_BUCKET_NAME, Key=s3_key)
-                message_data = json.loads(message_obj['Body'].read().decode('utf-8'))
-                messages.append(message_data)
-            except ClientError as e:
-                print(f"*** Error retrieving message from S3: {e}")
-                continue
-
-        # Sort by timestamp and limit the number of messages
-        messages.sort(key=lambda x: x['timestamp'], reverse=True)
-        return messages[:limit]
-
-    except ClientError as e:
-        print(f"*** Error listing message history from S3: {e}")
+        return response['Items']
+    except Exception as e:
+        print(f"*** Error retrieving message history from DynamoDB: {e}")
         return None
 
 
@@ -429,21 +395,21 @@ def lambda_handler(event, context):
     message_text = message_text.strip()
     print(f"*** Message Text : {message_text}")
 
-    # Save the message to S3 before processing
-    save_message_to_s3(chat_id, message_text, first_name, last_name)
+    # Save the message to DynamoDB before processing
+    save_message_to_dynamodb(chat_id, message_text, first_name, last_name)
 
     # Command: /history - Show message history
     if message_text.startswith('/history'):
         limit = 25
-        messages = list_message_history(chat_id, first_name, last_name, limit)
+        messages = get_message_history(chat_id, first_name, last_name, limit)
         if messages is None:
             send_message(chat_id, "Sorry, there was an error retrieving your message history 🥲")
         elif messages:
             response = f"📜 Your recent messages (up to {limit}):\n\n"
             for i, msg in enumerate(messages, 1):
                 timestamp = msg['timestamp']
-                text = msg['message_text']
-                response += f"{i} - [{timestamp}] {text}\n"
+                text = msg['message']
+                response += f"{i} - [{timestamp}] {text}\n\n"
             send_message(chat_id, response)
         else:
             send_message(chat_id, "No message history found 📭")
