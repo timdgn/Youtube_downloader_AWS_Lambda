@@ -19,6 +19,7 @@ A Telegram bot powered by AWS Lambda that allows users to download YouTube video
 - `/start` - Start the bot
 - `/list` - List all the videos/audios stored in the S3 bucket
 - `/delete filename.zip` - Delete a specific video/audio from the S3 bucket
+- `/history` - Show the messages history (hidden by default in the Telegram user interface)
 - `/help` - Display help with all available commands
 
 To download a video/audio, simply send:
@@ -241,6 +242,11 @@ The DynamoDB policy looks like this:
     ]
 }
 ```
+
+## 💸 Pricing
+
+Using this bot is extremely cost-effective for personal use.
+For a few downloads per month (typical user pattern), the AWS services used will cost approximately 0.01€ per month.
 
 ## 📝 Notes
 
