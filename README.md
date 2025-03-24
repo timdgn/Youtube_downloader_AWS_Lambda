@@ -250,6 +250,6 @@ For a few downloads per month (typical user pattern), the AWS services used will
 
 ## 📝 Notes
 
-- Files larger than 50MB are automatically stored on S3 and shared via a presigned link (valid for 1 hour), because Telegram API has a file size limit of 50MB
+- Files larger than 50MB are automatically stored on S3 and shared via a presigned link, because Telegram API has a file size limit of 50MB
 - Message history is stored in DynamoDB and can be accessed using the `/history` command, even though it's hidden to the user by default in the help message
 - Debug using CloudWatch Log groups and Lambda function logs located in the Monitoring tab
