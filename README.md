@@ -77,12 +77,7 @@ To create a Lambda layer for yt-dlp, follow these steps:
 
 1. Create a new directory for the layer:
    ```bash
-   mkdir yt-dlp-layer && cd yt-dlp-layer
-   ```
-
-2. Create a `bin` directory inside it:
-   ```bash
-   mkdir -p bin
+   mkdir -p yt-dlp-layer/bin && cd yt-dlp-layer
    ```
 
 3. Download `yt-dlp`:
@@ -102,7 +97,30 @@ To create a Lambda layer for yt-dlp, follow these steps:
 
 6. Upload the zip file to Lambda as a new layer and assign it to your Lambda function.
 
-For the FFmpeg layer, follow the steps of this tutorial [here](https://virkud-sarvesh.medium.com/building-ffmpeg-layer-for-a-lambda-function-a206f36d3edc) but instead of storing in S3, upload the final zip file to Lambda as a new layer and assign it to your Lambda function.
+To create a Lambda layer for FFmpeg, follow these steps:
+
+1. Download the latest version of FFmpeg binary files:
+    ```bash
+    wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+    ```
+
+2. Extract the downloaded file:
+   ```bash
+   tar xvf ffmpeg-release-amd64-static.tar.xz
+   ```
+
+3. Copy the contents of the extracted FFmpeg folder into a “ffmpeg/bin/” directory. Be careful to use the correct version in the command below, yours might be different from the 6.1 used in this example:
+    ```bash
+    mkdir -p ffmpeg/bin && cp ffmpeg-6.1-amd64-static/ffmpeg ffmpeg/bin/
+    ```
+   
+4. Zip the layer:
+    ```bash
+    zip -r ffmpeg.zip ffmpeg/bin
+    ```
+5. Upload the zip file to Lambda as a new layer and assign it to your Lambda function.
+
+Always make sure to use the latest version of yt-dlp, as YouTube often changes its API and yt-dlp needs to be updated to work properly. Same goes for FFmpeg but necessary updates are less frequent.
 
 Note that when creating a layer, you need to select "Compatible runtimes" as your python version you are using across your AWS services for this project.
 
