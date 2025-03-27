@@ -7,6 +7,7 @@ import zipfile
 from botocore.exceptions import ClientError
 from botocore.config import Config
 from datetime import datetime
+import logging
 
 REGION_NAME = "us-east-1"
 S3_YT_VIDEOS_BUCKET_NAME = "yt-downloaded-videos"
@@ -50,6 +51,8 @@ FORMATS = {
 WORKING_DIR = "/tmp"  # AWS Lambda has write permissions in /tmp
 os.makedirs(WORKING_DIR, exist_ok=True)
 HTTP = urllib3.PoolManager()
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 def get_secret_bot_token():
@@ -230,51 +233,54 @@ def send_video_or_link(chat_id, file_path, first_name=None, last_name=None):
 
 
 def download_video(url, resolution):
-    cookie_file = os.path.join(WORKING_DIR, "cookie.txt")
-    output_path = os.path.join(WORKING_DIR, "%(title)s.%(ext)s")
+    try:
+        cookie_file = os.path.join(WORKING_DIR, "cookie.txt")
+        output_path = os.path.join(WORKING_DIR, "%(title)s.%(ext)s")
 
-    s3 = boto3.client('s3')
-    s3.download_file(S3_COOKIES_BUCKET_NAME, S3_COOKIES_KEY, cookie_file)
+        s3 = boto3.client('s3')
+        s3.download_file(S3_COOKIES_BUCKET_NAME, S3_COOKIES_KEY, cookie_file)
 
-    format_string = FORMATS.get(resolution, FORMATS["medium"])
+        format_string = FORMATS.get(resolution, FORMATS["medium"])
 
-    command_download = [
-        YT_DLP_PATH,
-        "--cookies", cookie_file,
-        "--output", output_path,
-        "--format", format_string]
+        command_download = [
+            YT_DLP_PATH,
+            "--cookies", cookie_file,
+            "--output", output_path,
+            "--format", format_string]
 
-    if resolution == "mp3":
-        command_download.extend([
-            "--extract-audio",
-            "--audio-format", "mp3"])
-    else:
-        command_download.extend([
-            "--ffmpeg-location", FFMPEG_PATH,
-            "--merge-output-format", "mp4"])
-
-    command_download.append(url)
-
-    print("*** Executing command:", " ".join(command_download))
-    process = subprocess.run(command_download, capture_output=True, text=True)
-    print(process.stdout)
-
-    if process.returncode == 0:
-        print("*** Download successful")
         if resolution == "mp3":
-            for file in os.listdir(WORKING_DIR):
-                if file.endswith(".mp3"):
-                    return os.path.join(WORKING_DIR, file)
+            command_download.extend([
+                "--extract-audio",
+                "--audio-format", "mp3"])
         else:
-            for file in os.listdir(WORKING_DIR):
-                if file.endswith(".mp4"):
-                    return os.path.join(WORKING_DIR, file)
-        print("*** No output file found")
-    else:
-        print("*** Error downloading")
-        print(f"*** Error downloading with stderr: {process.stderr}")
+            command_download.extend([
+                "--ffmpeg-location", FFMPEG_PATH,
+                "--merge-output-format", "mp4"])
 
-    return None
+        command_download.append(url)
+
+        logger.info(f"Executing command: {' '.join(command_download)}")
+        process = subprocess.run(command_download, capture_output=True, text=True)
+        logger.info(f"yt-dlp stdout: {process.stdout}")
+
+        if process.stderr:
+            logger.error(f"yt-dlp stderr: {process.stderr}")
+
+        if process.returncode != 0:
+            raise Exception(f"yt-dlp failed with return code {process.returncode}: {process.stderr}")
+
+        if process.returncode == 0:
+            if resolution == "mp3":
+                for file in os.listdir(WORKING_DIR):
+                    if file.endswith(".mp3"):
+                        return os.path.join(WORKING_DIR, file)
+            else:
+                for file in os.listdir(WORKING_DIR):
+                    if file.endswith(".mp4"):
+                        return os.path.join(WORKING_DIR, file)
+    except Exception as e:
+        logger.error(f"Error in download_video: {str(e)}", exc_info=True)
+        return None
 
 
 def list_s3_videos(chat_id, first_name=None, last_name=None):
@@ -333,18 +339,25 @@ def process_video_download(chat_id, url, resolution, first_name=None, last_name=
     """
     Function to handle the video download process asynchronously
     """
+    try:
+        logger.info(f"Starting video download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
 
-    send_message(chat_id, "Download in progress, please wait... 🔄")
-    file_path = download_video(url, resolution)
+        send_message(chat_id, "Download in progress, please wait... 🔄")
+        file_path = download_video(url, resolution)
 
-    if file_path:
+        if not file_path:
+            logger.error(f"Download failed for url: {url}")
+            send_message(chat_id, "Download failed 🤕 Please try again!")
+            return
+
         file_name = os.path.basename(file_path)
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
         msg = f"""Sending "{file_name}" in {resolution} resolution ({file_size_mb:.2f} MB), coming soon... 📲"""
         send_message(chat_id, msg)
         send_video_or_link(chat_id, file_path, first_name, last_name)
-    else:
-        send_message(chat_id, "Download failed 🤕 Please try again!")
+    except Exception as e:
+        logger.error(f"Error in process_video_download: {str(e)}", exc_info=True)
+        send_message(chat_id, "An unexpected error occurred 😕")
 
 
 def invoke_lambda_async(payload):
