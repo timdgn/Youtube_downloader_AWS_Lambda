@@ -13,6 +13,7 @@ A Telegram bot powered by AWS Lambda that allows users to download YouTube video
 - YouTube cookies management to access age-restricted content
 - Commands to list and delete stored videos/audios
 - Message history tracking in AWS DynamoDB for user activity monitoring
+- An alert through CloudWatch (and mail via SNS if you want) notifies you when yt-dlp cannot download a video/audio from YouTube and needs to be updated
 
 ## 📋 Available Commands
 
@@ -157,7 +158,7 @@ Create a new DynamoDB table:
 
 ### 🛡️ IAM Permissions
 
-Configure IAM permissions to access S3 ("s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject") and Secrets Manager ("secretsmanager:GetSecretValue"). You can do it in the Lambda function Configuration > Permissions > Click on the Role name > Add permissions > Create inline policy > Add the required permissions.
+Configure IAM permissions to access S3, Secrets Manager, Lambda, DynamoDB and CloudWatch. You can do it in the Lambda function Configuration > Permissions > Click on the Role name > Add permissions > Create inline policy > Add the required permissions.
 
 The S3 policy looks like this:
 ```json
@@ -256,6 +257,21 @@ The DynamoDB policy looks like this:
                 "dynamodb:Scan"
             ],
             "Resource": "arn:aws:dynamodb:*:*:table/telegram_messages"
+        }
+    ]
+}
+```
+
+The CloudWatch policy looks like this:
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": "cloudwatch:PutMetricData",
+            "Resource": "*"
         }
     ]
 }

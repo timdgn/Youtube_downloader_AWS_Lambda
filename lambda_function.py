@@ -9,6 +9,7 @@ from botocore.config import Config
 from datetime import datetime
 import logging
 
+
 REGION_NAME = "us-east-1"
 S3_YT_VIDEOS_BUCKET_NAME = "yt-downloaded-videos"
 S3_COOKIES_BUCKET_NAME = "yt-cookies"
@@ -53,6 +54,7 @@ os.makedirs(WORKING_DIR, exist_ok=True)
 HTTP = urllib3.PoolManager()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+cloudwatch = boto3.client('cloudwatch')
 
 
 def get_secret_bot_token():
@@ -263,9 +265,6 @@ def download_video(url, resolution):
         process = subprocess.run(command_download, capture_output=True, text=True)
         logger.info(f"yt-dlp stdout: {process.stdout}")
 
-        if process.stderr:
-            logger.error(f"yt-dlp stderr: {process.stderr}")
-
         if process.returncode != 0:
             raise Exception(f"yt-dlp failed with return code {process.returncode}: {process.stderr}")
 
@@ -335,29 +334,45 @@ def delete_s3_video(chat_id, file_name, first_name=None, last_name=None):
         return False
 
 
+def send_cloudwatch_dl_error(chat_id):
+    """
+    Send a metric to CloudWatch to track download errors
+    """
+
+    cloudwatch.put_metric_data(
+        Namespace='YTDownloader_app',
+        MetricData=[
+            {
+                'MetricName': 'DownloadError',
+                'Value': 1,
+                'Unit': 'Count'
+            },
+        ]
+    )
+
+    msg = "🤖 Download failed, I need to be updated, my admin Tim has been notified 🔔"
+    send_message(chat_id, msg)
+
+
 def process_video_download(chat_id, url, resolution, first_name=None, last_name=None):
     """
     Function to handle the video download process asynchronously
     """
-    try:
-        logger.info(f"Starting video download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
 
-        send_message(chat_id, "Download in progress, please wait... 🔄")
-        file_path = download_video(url, resolution)
+    logger.info(f"Starting video download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
 
-        if not file_path:
-            logger.error(f"Download failed for url: {url}")
-            send_message(chat_id, "Download failed 🤕 Please try again!")
-            return
+    send_message(chat_id, "Download in progress, please wait... 🔄")
+    file_path = download_video(url, resolution)
 
+    if file_path:
         file_name = os.path.basename(file_path)
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
         msg = f"""Sending "{file_name}" in {resolution} resolution ({file_size_mb:.2f} MB), coming soon... 📲"""
         send_message(chat_id, msg)
         send_video_or_link(chat_id, file_path, first_name, last_name)
-    except Exception as e:
-        logger.error(f"Error in process_video_download: {str(e)}", exc_info=True)
-        send_message(chat_id, "An unexpected error occurred 😕")
+    else:
+        logger.error(f"Error in process_video_download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
+        send_cloudwatch_dl_error(chat_id)
 
 
 def invoke_lambda_async(payload):
