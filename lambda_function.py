@@ -67,6 +67,7 @@ def get_secret_bot_token():
         get_secret_value_response = client.get_secret_value(
             SecretId=BOT_SECRET_NAME)
     except ClientError as e:
+        logger.error(f"Error retrieving bot token: {e}")
         raise e
 
     # Convert SecretString to a dictionary
@@ -98,9 +99,9 @@ def save_message_to_dynamodb(chat_id, message_text, first_name=None, last_name=N
             }
         }
         MESSAGES_TABLE.put_item(Item=item)
-        print(f"*** Message saved to DynamoDB for chat_id: {chat_id}")
+        logger.info(f"Message saved to DynamoDB for chat_id: {chat_id}")
     except Exception as e:
-        print(f"*** Error saving message to DynamoDB: {e}")
+        logger.error(f"Error saving message to DynamoDB: {e}")
 
 
 def get_message_history(chat_id, first_name, last_name, limit=25):
@@ -116,7 +117,7 @@ def get_message_history(chat_id, first_name, last_name, limit=25):
         )
         return response['Items']
     except Exception as e:
-        print(f"*** Error retrieving message history from DynamoDB: {e}")
+        logger.error(f"Error retrieving message history from DynamoDB: {e}")
         return None
 
 
@@ -130,10 +131,10 @@ def zip_file(file_path):
     try:
         with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
             zipf.write(file_path, arcname=file_name)
-        print(f"*** Successfully zipped file: {zip_file_path}")
+        logger.info(f"Successfully zipped file: {zip_file_path}")
         return zip_file_path
     except Exception as e:
-        print(f"*** Error zipping file: {e}")
+        logger.error(f"Error zipping file: {e}")
         return None
 
 
@@ -160,9 +161,9 @@ def upload_file_to_s3(file_path, chat_id, first_name=None, last_name=None):
 
     try:
         s3.upload_file(file_path, S3_YT_VIDEOS_BUCKET_NAME, s3_key)
-        print(f"*** Successfully uploaded to S3: {s3_key}")
+        logger.info(f"Successfully uploaded to S3: {s3_key}")
     except ClientError as e:
-        print(f"*** Error uploading file to S3: {e}")
+        logger.error(f"Error uploading file to S3: {e}")
         return None
 
     return s3_key
@@ -176,18 +177,18 @@ def generate_url(s3_key):
                                         ExpiresIn=86400)  # 24 hours
         return url
     except ClientError as e:
-        print(f"*** Error generating presigned URL: {e}")
+        logger.error(f"Error generating presigned URL: {e}")
         return None
 
 
 def send_video_or_link(chat_id, file_path, first_name=None, last_name=None):
     file_name = os.path.basename(file_path)
     file_size_mb = os.path.getsize(file_path) / (1024 * 1024)  # Convert to MB
-    print(f"*** File size: {file_size_mb:.2f} MB")
+    logger.info(f"File size: {file_size_mb:.2f} MB")
 
     # If the file size is less than 50MB, send it directly
     if file_size_mb < 50:
-        print(f"*** File is {file_size_mb:.2f}MB, sending directly")
+        logger.info(f"File is {file_size_mb:.2f}MB, sending directly")
         if file_name.endswith('.mp3'):
             url = f"https://api.telegram.org/bot{get_secret_bot_token()}/sendAudio"
             with open(file_path, 'rb') as audio:
@@ -200,37 +201,31 @@ def send_video_or_link(chat_id, file_path, first_name=None, last_name=None):
             fields = {"chat_id": str(chat_id), "video": (file_name, video_data, "video/mp4")}
 
         response = HTTP.request('POST', url, fields=fields)
-        print(f"*** Response of the POST request: {response.data}")
+        logger.info(f"Response of the POST request: {response.data}")
 
     # If the file size is 50MB or more, zip it, upload to S3 and send the link
     else:
-        print(f"*** File is {file_size_mb:.2f}MB, zipping, uploading to S3 and sending link")
+        logger.info(f"File is {file_size_mb:.2f}MB, zipping, uploading to S3 and sending link")
 
         media = "audio/music" if file_name.endswith('.mp3') else "video"
 
-        # Zip the file
         zip_file_path = zip_file(file_path)
-
-        # Upload the zipped file to S3 with chat_id and user info as folder
         s3_key = upload_file_to_s3(zip_file_path, chat_id, first_name, last_name)
         if s3_key:
-            # Generate a pre-signed URL
             file_url = generate_url(s3_key)
             if file_url:
                 msg = f"Here's your {media} (as a zip file) 🍿\n\n{file_url}"
                 send_message(chat_id, msg)
-                print(f"*** {media} uploaded to S3 and link sent to user")
+                logger.info(f"{media} uploaded to S3 and link sent to user")
             else:
-                print("*** Failed to generate pre-signed URL")
+                logger.error("Failed to generate pre-signed URL")
                 send_message(chat_id, "Sorry, there was an error creating the download URL 🥲")
 
-            # Clean up the zip file
             os.remove(zip_file_path)
         else:
-            print(f"*** Failed to upload {media} to S3")
+            logger.error(f"Failed to upload {media} to S3")
             send_message(chat_id, f"Sorry, there was an error sending the {media} to the server 🥲")
 
-    # Clean up after sending the video
     os.remove(file_path)
 
 
@@ -307,7 +302,7 @@ def list_s3_videos(chat_id, first_name=None, last_name=None):
         else:
             return []
     except ClientError as e:
-        print(f"*** Error listing S3 objects: {e}")
+        logger.error(f"Error listing S3 objects: {e}")
         return None
 
 
@@ -421,7 +416,7 @@ def lambda_handler(event, context):
 
     # Strip message_text
     message_text = message_text.strip()
-    print(f"*** Message Text : {message_text}")
+    logger.info(f"Message Text: {message_text}")
 
     # Save the message to DynamoDB before processing
     save_message_to_dynamodb(chat_id, message_text, first_name, last_name)
