@@ -90,13 +90,11 @@ def save_message_to_dynamodb(chat_id, message_text, first_name=None, last_name=N
     """
     try:
         item = {
-            'chat_id': f"{str(chat_id)}_{first_name}_{last_name}",
+            'chat_id': str(chat_id),  # Using only chat_id as the key
             'timestamp': datetime.utcnow().isoformat(),
             'message': message_text,
-            'user_info': {
-                'first_name': first_name,
-                'last_name': last_name
-            }
+            'first_name': first_name,
+            'last_name': last_name
         }
         MESSAGES_TABLE.put_item(Item=item)
         logger.info(f"Message saved to DynamoDB for chat_id: {chat_id}")
@@ -104,16 +102,16 @@ def save_message_to_dynamodb(chat_id, message_text, first_name=None, last_name=N
         logger.error(f"Error saving message to DynamoDB: {e}")
 
 
-def get_message_history(chat_id, first_name, last_name, limit=25):
+def get_message_history(chat_id, limit=25):
     """
     Retrieve the user's message history from DynamoDB, sorted by timestamp.
     """
     try:
         response = MESSAGES_TABLE.query(
             KeyConditionExpression='chat_id = :chat_id',
-            ExpressionAttributeValues={':chat_id': f"{str(chat_id)}_{first_name}_{last_name}"},
+            ExpressionAttributeValues={':chat_id': str(chat_id)},
             Limit=limit,
-            ScanIndexForward=False  # Get most recent first
+            ScanIndexForward=True  # Get most recent as last
         )
         return response['Items']
     except Exception as e:
@@ -424,15 +422,15 @@ def lambda_handler(event, context):
     # Command: /history - Show message history
     if message_text.startswith('/history'):
         limit = 25
-        messages = get_message_history(chat_id, first_name, last_name, limit)
+        messages = get_message_history(chat_id, limit)
         if messages is None:
             send_message(chat_id, "Sorry, there was an error retrieving your message history 🥲")
         elif messages:
             response = f"📜 Your recent messages (up to {limit}):\n\n"
             for i, msg in enumerate(messages, 1):
-                timestamp = msg['timestamp']
+                timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%Y-%m-%d at %H:%M:%S')
                 text = msg['message']
-                response += f"{i} - [{timestamp}] {text}\n\n"
+                response += f"{i} - {timestamp}: {text}\n\n"
             send_message(chat_id, response)
         else:
             send_message(chat_id, "No message history found 📭")
