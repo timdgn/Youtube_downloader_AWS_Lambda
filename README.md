@@ -135,18 +135,17 @@ Note that when creating a layer, you need to select "Compatible runtimes" as you
 6. Add webhook by using this url https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<API_GATEWAY_URL>
 7. (Optional) Delete webhook by using this url https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook
 
-### 🪣 S3 bucket for Cookies and stored youtube videos
+### 🪣 S3 bucket for Cookies and stored YouTube videos
 
-You'll need three S3 buckets:
+You'll need two S3 buckets:
 1. A bucket for YouTube cookies (needed for yt-dlp to work)
 2. A bucket for storing downloaded videos that are larger than 50MB
-3. A bucket for storing user message history
 
 For the cookies bucket (Yt-dlp sometimes needs cookies to work):
 
-1. Export your youtube cookies with a Chrome extention like "Get cookies.txt LOCALLY"
+1. Export your YouTube cookies with a Chrome extention like "Get cookies.txt LOCALLY"
 2. Create a new S3 bucket to store the cookies file
-3. Upload the youtube cookies .txt file to the bucket
+3. Upload the YouTube cookies .txt file to the bucket
 4. Adapt the `lambda_function.py` file to use the bucket name and file key (i.e. the path in the bucket)
 
 ### 📊 DynamoDB Table for Message History
