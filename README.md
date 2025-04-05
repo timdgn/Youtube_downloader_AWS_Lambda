@@ -121,9 +121,12 @@ To create a Lambda layer for FFmpeg, follow these steps:
     ```
 5. Upload the zip file to Lambda as a new layer and assign it to your Lambda function.
 
-Always make sure to use the latest version of yt-dlp, as YouTube often changes its API and yt-dlp needs to be updated to work properly. Same goes for FFmpeg but necessary updates are less frequent.
-
 Note that when creating a layer, you need to select "Compatible runtimes" as your python version you are using across your AWS services for this project.
+
+Always make sure to use the latest version of yt-dlp, as YouTube often changes its API and yt-dlp needs to be updated to work properly. Same goes for FFmpeg but necessary updates are less frequent.
+To be alerted whenever yt-dlp needs to be updated, you can create another Lambda function from the file 'lambda_function_monitor_yt-dlp.py' and schedule it to run daily using AWS EventBridge.
+You can set up an alarm with CloudWatch whenever it fails, and configure it to be notified with SNS about the need to update yt-dlp. Don't forget to give the necessary S3 permissions "s3:GetObject" to get your cookies file.
+
 
 ### 🌐 API Gateway
 
