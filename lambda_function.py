@@ -380,6 +380,100 @@ def invoke_lambda_async(payload):
     )
 
 
+def handle_history_command(chat_id):
+    """
+    Handle the /history command to retrieve and display the user's message history
+    """
+    limit = 25
+    messages = get_message_history(chat_id, limit)
+    if messages is None:
+        send_message(chat_id, "Sorry, there was an error retrieving your message history 🥲")
+    elif messages:
+        response = f"📜 Your recent messages (up to {limit}):\n\n"
+        for i, msg in enumerate(messages, 1):
+            timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%Y-%m-%d at %H:%M:%S')
+            text = msg['message']
+            response += f"{i} - {timestamp}: {text}\n\n"
+        send_message(chat_id, response)
+    else:
+        send_message(chat_id, "No message history found 📭")
+
+
+def handle_list_command(chat_id, first_name, last_name):
+    """
+    Handle the /list command to list all videos in the user's S3 folder
+    """
+    videos = list_s3_videos(chat_id, first_name, last_name)
+    if videos:
+        message = "📋 Your available videos:\n\n"
+        for i, video in enumerate(videos, 1):
+            message += f"{i} - {video}\n\n"
+        send_message(chat_id, message)
+    else:
+        send_message(chat_id, "No videos available, nothing, nada 🧹")
+
+
+def handle_delete_command(chat_id, message_text, first_name, last_name):
+    """
+    Handle the /delete command to delete a specific video from the user's S3 folder
+    """
+    parts = message_text.split(maxsplit=1)  # keep maxsplit=1 because filenames can have spaces
+
+    if len(parts) > 1:
+        file_name = parts[1].strip()
+        success = delete_s3_video(chat_id, file_name, first_name, last_name)
+        if success:
+            send_message(chat_id, f"""✅ Video "{file_name}" deleted, c'est ciao 🫡""")
+        else:
+            send_message(chat_id, f"""❌ Unable to delete "{file_name}", check the filename 🧐""")
+    else:
+        send_message(chat_id, "❌ Please specify the filename to delete, for example /delete filename.zip")
+
+
+def handle_video_download(chat_id, message_text, first_name, last_name):
+    """
+    Handle the video download request
+    """
+    parts = message_text.strip().split()
+    if len(parts) != 2:
+        send_message(chat_id, HELP_MESSAGE)
+        return {'statusCode': 200, 'body': json.dumps('Invalid input')}
+
+    url, resolution = parts[0], parts[1].lower()
+    print(f"*** URL : {url}")
+    print(f"*** resolution : {resolution}")
+
+    # Check for the doomed URL
+    if "dQw4w9WgXcQ" in url:
+        send_message(chat_id, "Don't even think about it 🤨")
+        return {'statusCode': 200, 'body': json.dumps('Invalid URL')}
+
+    # Check for playlist URL
+    if "list" in url:
+        if "watch" in url:
+            url = url.split("&list")[0]
+        else:
+            send_message(chat_id, "Playlist download is not supported ❌")
+            return {'statusCode': 200, 'body': json.dumps('Invalid URL')}
+
+    # Check for valid resolution
+    if resolution not in FORMATS.keys():
+        send_message(chat_id, HELP_MESSAGE)
+        return {'statusCode': 200, 'body': json.dumps('Invalid resolution')}
+
+    # Invoke the same Lambda function asynchronously to process the video
+    payload = {
+        'type': 'process_video',
+        'chat_id': chat_id,
+        'first_name': first_name,
+        'last_name': last_name,
+        'url': url,
+        'resolution': resolution}
+    invoke_lambda_async(payload)
+
+    return {'statusCode': 200, 'body': json.dumps('Video processing started')}
+
+
 def lambda_handler(event, context):
     print(f"*** Bot Token : {get_secret_bot_token()}")
     print(f"*** Event : {event}")
@@ -397,7 +491,6 @@ def lambda_handler(event, context):
     # Regular webhook handling
     body = json.loads(event.get('body', '{}'))
     print(f"*** Body : {body}")
-
     try:
         chat_id = body['message']['chat']['id']
         message_text = body['message']['text']
@@ -421,48 +514,17 @@ def lambda_handler(event, context):
 
     # Command: /history - Show message history
     if message_text.startswith('/history'):
-        limit = 25
-        messages = get_message_history(chat_id, limit)
-        if messages is None:
-            send_message(chat_id, "Sorry, there was an error retrieving your message history 🥲")
-        elif messages:
-            response = f"📜 Your recent messages (up to {limit}):\n\n"
-            for i, msg in enumerate(messages, 1):
-                timestamp = datetime.fromisoformat(msg['timestamp']).strftime('%Y-%m-%d at %H:%M:%S')
-                text = msg['message']
-                response += f"{i} - {timestamp}: {text}\n\n"
-            send_message(chat_id, response)
-        else:
-            send_message(chat_id, "No message history found 📭")
+        handle_history_command(chat_id)
         return {'statusCode': 200, 'body': json.dumps('History command processed')}
 
     # Command: /list - List all videos in S3 bucket for this user
     elif message_text.startswith('/list'):
-        videos = list_s3_videos(chat_id, first_name, last_name)
-        if videos:
-            message = "📋 Your available videos:\n\n"
-            for i, video in enumerate(videos, 1):
-                message += f"{i} - {video}\n\n"
-            send_message(chat_id, message)
-        else:
-            send_message(chat_id, "No videos available, nothing, nada 🧹")
+        handle_list_command(chat_id, first_name, last_name)
         return {'statusCode': 200, 'body': json.dumps('List command processed')}
 
     # Command: /delete filename.zip - Delete a specific video
     elif message_text.startswith('/delete'):
-        parts = message_text.split(maxsplit=1)  # keep maxsplit=1 because filenames can have spaces
-
-        if len(parts) > 1:
-            file_name = parts[1].strip()
-            success = delete_s3_video(chat_id, file_name, first_name, last_name)
-            if success:
-                send_message(chat_id, f"""✅ Video "{file_name}" deleted, c'est ciao 🫡""")
-                return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
-            else:
-                send_message(chat_id, f"""❌ Unable to delete "{file_name}", check the filename 🧐""")
-                return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
-        else:
-            send_message(chat_id, "❌ Please specify the filename to delete, for example /delete filename.zip")
+        handle_delete_command(chat_id, message_text, first_name, last_name)
         return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
 
     # Command: /help or /start - Show available commands
@@ -472,31 +534,5 @@ def lambda_handler(event, context):
 
     # Standard video download command
     else:
-        parts = message_text.strip().split()
-        if len(parts) != 2:
-            send_message(chat_id, HELP_MESSAGE)
-            return {'statusCode': 200, 'body': json.dumps('Invalid input')}
-
-        url, resolution = parts[0], parts[1].lower()
-        print(f"*** URL : {url}")
-        print(f"*** resolution : {resolution}")
-
-        if "dQw4w9WgXcQ" in url:
-            send_message(chat_id, "Don't even think about it 🤨")
-            return {'statusCode': 200, 'body': json.dumps('Invalid URL')}
-
-        if resolution not in FORMATS.keys():
-            send_message(chat_id, HELP_MESSAGE)
-            return {'statusCode': 200, 'body': json.dumps('Invalid resolution')}
-
-        # Invoke the same Lambda function asynchronously to process the video
-        payload = {
-            'type': 'process_video',
-            'chat_id': chat_id,
-            'first_name': first_name,
-            'last_name': last_name,
-            'url': url,
-            'resolution': resolution}
-        invoke_lambda_async(payload)
-
-        return {'statusCode': 200, 'body': json.dumps('Video download request received')}
+        response = handle_video_download(chat_id, message_text, first_name, last_name)
+        return response

@@ -134,9 +134,9 @@ You can set up an alarm with CloudWatch whenever it fails, and configure it to b
 2. Add a new integration with your Lambda function
 3. Choose "Method" as ANY for simplicity, the "Resource path" like "/my_api", and "Integration target" as your Lambda function name
 4. Keep Stage name as "$default" and "Auto-deployed" selected
-5. Get webhook info by using this url https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo
-6. Add webhook by using this url https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<API_GATEWAY_URL>
-7. (Optional) Delete webhook by using this url https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook
+5. Get webhook info by using this url `https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo`
+6. Add webhook by using this url `https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=<API_GATEWAY_URL>`
+7. (Optional) Delete webhook by using this url `https://api.telegram.org/bot<BOT_TOKEN>/deleteWebhook`
 
 ### 🪣 S3 bucket for Cookies and stored YouTube videos
 
