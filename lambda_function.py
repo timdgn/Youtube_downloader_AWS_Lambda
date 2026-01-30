@@ -16,6 +16,7 @@ S3_COOKIES_BUCKET_NAME = "yt-cookies"
 S3_COOKIES_KEY = "youtube_cookies.txt"
 YT_DLP_PATH = "/opt/bin/yt-dlp"
 FFMPEG_PATH = "/opt/bin/ffmpeg"
+DENO_PATH = "/opt/bin/deno"
 BOT_SECRET_NAME = "Telegram-bot-token"
 BOT_SECRET_KEY = "bot_token"
 DYNAMODB = boto3.resource('dynamodb')
@@ -27,6 +28,7 @@ HELP_MESSAGE = """
 /start - Start the bot
 /list - List all your videos on the server
 /delete filename.zip - Delete a specific video
+/empty - Delete all videos
 /help - Display this help
 
 To download a YouTube video:
@@ -250,6 +252,7 @@ def download_video(url, resolution):
         else:
             command_download.extend([
                 "--ffmpeg-location", FFMPEG_PATH,
+                "--js-runtimes", f"deno:{DENO_PATH}",
                 "--merge-output-format", "mp4"])
 
         command_download.append(url)
@@ -325,6 +328,41 @@ def delete_s3_video(chat_id, file_name, first_name=None, last_name=None):
     except ClientError as e:
         print(f"*** Error deleting S3 object: {e}")
         return False
+
+
+def delete_all_s3_zips(chat_id, first_name=None, last_name=None):
+    """
+    Delete all zip files from the S3 bucket for the specific chat_id
+    """
+    s3 = boto3.client('s3')
+    try:
+        # Build the prefix for the user's folder
+        prefix = f"{chat_id}"
+        if first_name:
+            prefix += f"_{first_name}"
+        if last_name:
+            prefix += f"_{last_name}"
+        prefix += "/"
+
+        # List all objects in the user's folder
+        response = s3.list_objects_v2(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Prefix=prefix)
+
+        if 'Contents' not in response:
+            return 0
+
+        # Filter and delete only .zip files
+        deleted_count = 0
+        for obj in response['Contents']:
+            key = obj['Key']
+            if key.endswith('.zip'):
+                s3.delete_object(Bucket=S3_YT_VIDEOS_BUCKET_NAME, Key=key)
+                deleted_count += 1
+                logger.info(f"Deleted zip file: {key}")
+
+        return deleted_count
+    except ClientError as e:
+        logger.error(f"Error deleting S3 zip files: {e}")
+        return -1
 
 
 def send_cloudwatch_dl_error(chat_id):
@@ -430,6 +468,19 @@ def handle_delete_command(chat_id, message_text, first_name, last_name):
         send_message(chat_id, "❌ Please specify the filename to delete, for example /delete filename.zip")
 
 
+def handle_empty_command(chat_id, first_name, last_name):
+    """
+    Handle the /empty command to delete all zip files from the user's S3 folder
+    """
+    deleted_count = delete_all_s3_zips(chat_id, first_name, last_name)
+    if deleted_count > 0:
+        send_message(chat_id, f"""✅ Deleted {deleted_count} zip file(s), all clean now 🧹""")
+    elif deleted_count == 0:
+        send_message(chat_id, "ℹ️ No zip files found to delete 📭")
+    else:
+        send_message(chat_id, "❌ Error deleting zip files, please try again 🥲")
+
+
 def handle_video_download(chat_id, message_text, first_name, last_name):
     """
     Handle the video download request
@@ -526,6 +577,11 @@ def lambda_handler(event, context):
     elif message_text.startswith('/delete'):
         handle_delete_command(chat_id, message_text, first_name, last_name)
         return {'statusCode': 200, 'body': json.dumps('Delete command processed')}
+
+    # Command: /empty - Delete all zip files
+    elif message_text.startswith('/empty'):
+        handle_empty_command(chat_id, first_name, last_name)
+        return {'statusCode': 200, 'body': json.dumps('Empty command processed')}
 
     # Command: /help or /start - Show available commands
     elif message_text.startswith('/help') or message_text.startswith('/start'):
