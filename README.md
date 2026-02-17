@@ -12,6 +12,7 @@ A Telegram bot powered by AWS Lambda that allows users to download YouTube video
 - Automatic storage on AWS S3 and generation of presigned links for files over 50 MB
 - YouTube cookies management to access age-restricted content
 - Commands to list and delete stored videos/audios
+- System information display with yt-dlp version checking
 - Message history tracking in AWS DynamoDB for user activity monitoring
 - An alert through CloudWatch (and mail via SNS if you want) notifies you when yt-dlp cannot download a video/audio from YouTube and needs to be updated
 
@@ -20,7 +21,9 @@ A Telegram bot powered by AWS Lambda that allows users to download YouTube video
 - `/start` - Start the bot
 - `/list` - List all the videos/audios stored in the S3 bucket
 - `/delete filename.zip` - Delete a specific video/audio from the S3 bucket
-- `/history` - Show the messages history (hidden by default in the Telegram user interface)
+- `/empty` - Delete all videos/audios from the S3 bucket
+- `/history` - Show your message history
+- `/info` - Display system information (yt-dlp version)
 - `/help` - Display help with all available commands
 
 To download a video/audio, simply send:
@@ -287,5 +290,5 @@ For a few downloads per month (typical user pattern), the AWS services used will
 ## 📝 Notes
 
 - Files larger than 50MB are automatically stored on S3 and shared via a presigned link, because Telegram API has a file size limit of 50MB
-- Message history is stored in DynamoDB and can be accessed using the `/history` command, even though it's hidden to the user by default in the help message
+- Message history is stored in DynamoDB and can be accessed using the `/history` command
 - Debug using CloudWatch Log groups and Lambda function logs located in the Monitoring tab

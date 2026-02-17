@@ -29,6 +29,8 @@ HELP_MESSAGE = """
 /list - List all your videos on the server
 /delete filename.zip - Delete a specific video
 /empty - Delete all videos
+/history - Show your message history
+/info - Display yt-dlp version
 /help - Display this help
 
 To download a YouTube video:
@@ -481,6 +483,30 @@ def handle_empty_command(chat_id, first_name, last_name):
         send_message(chat_id, "❌ Error deleting zip files, please try again 🥲")
 
 
+def handle_info_command(chat_id):
+    """
+    Handle the /info command to display system information including yt-dlp version
+    """
+    try:
+        command = [YT_DLP_PATH, "--version"]
+        process = subprocess.run(command, capture_output=True, text=True)
+
+        if process.returncode == 0:
+            version = process.stdout.strip()
+            message = f"""ℹ️ System Information
+
+📦 yt-dlp version: {version}
+
+This bot uses yt-dlp to download videos from YouTube and other platforms."""
+            send_message(chat_id, message)
+        else:
+            logger.error(f"yt-dlp version check failed: {process.stderr}")
+            send_message(chat_id, "❌ Unable to retrieve system information 🥲")
+    except Exception as e:
+        logger.error(f"Error in handle_info_command: {e}")
+        send_message(chat_id, "❌ Unable to retrieve system information 🥲")
+
+
 def handle_video_download(chat_id, message_text, first_name, last_name):
     """
     Handle the video download request
@@ -582,6 +608,11 @@ def lambda_handler(event, context):
     elif message_text.startswith('/empty'):
         handle_empty_command(chat_id, first_name, last_name)
         return {'statusCode': 200, 'body': json.dumps('Empty command processed')}
+
+    # Command: /info - Display system information
+    elif message_text.startswith('/info'):
+        handle_info_command(chat_id)
+        return {'statusCode': 200, 'body': json.dumps('Info command processed')}
 
     # Command: /help or /start - Show available commands
     elif message_text.startswith('/help') or message_text.startswith('/start'):
