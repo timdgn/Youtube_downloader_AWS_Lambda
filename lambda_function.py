@@ -31,6 +31,7 @@ HELP_MESSAGE = """
 /empty - Delete all videos
 /history - Show your message history
 /info - Display yt-dlp version
+/test - Test the download pipeline
 /help - Display this help
 
 To download a YouTube video:
