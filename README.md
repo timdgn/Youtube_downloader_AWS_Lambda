@@ -24,6 +24,7 @@ A Telegram bot powered by AWS Lambda that allows users to download YouTube video
 - `/empty` - Delete all videos/audios from the S3 bucket
 - `/history` - Show your message history
 - `/info` - Display system information (yt-dlp version)
+- `/test` - Test the download pipeline to verify it's working
 - `/help` - Display help with all available commands
 
 To download a video/audio, simply send:
