@@ -507,6 +507,23 @@ This bot uses yt-dlp to download videos from YouTube and other platforms."""
         send_message(chat_id, "❌ Unable to retrieve system information 🥲")
 
 
+def handle_test_command(chat_id):
+    """
+    Handle the /test command to verify the download pipeline is working
+    """
+    TEST_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    send_message(chat_id, "Running download test, please wait...")
+    try:
+        file_path = download_video(TEST_URL, "low")
+        send_message(chat_id, f"✅ Test passed.")
+    except Exception as e:
+        logger.error(f"Error in handle_test_command: {e}")
+        send_message(chat_id, f"❌ Test failed: {str(e)}")
+    finally:
+        if 'file_path' in locals() and file_path and os.path.exists(file_path):
+            os.remove(file_path)
+
+
 def handle_video_download(chat_id, message_text, first_name, last_name):
     """
     Handle the video download request
@@ -613,6 +630,11 @@ def lambda_handler(event, context):
     elif message_text.startswith('/info'):
         handle_info_command(chat_id)
         return {'statusCode': 200, 'body': json.dumps('Info command processed')}
+
+    # Command: /test - Test the download pipeline
+    elif message_text.startswith('/test'):
+        handle_test_command(chat_id)
+        return {'statusCode': 200, 'body': json.dumps('Test command processed')}
 
     # Command: /help or /start - Show available commands
     elif message_text.startswith('/help') or message_text.startswith('/start'):
