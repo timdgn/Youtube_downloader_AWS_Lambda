@@ -406,10 +406,6 @@ def process_video_download(chat_id, url, resolution, first_name=None, last_name=
         file_path = download_video(url, resolution, temp_dir=temp_dir)
 
         if file_path:
-            file_name = os.path.basename(file_path)
-            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            msg = f"""Sending "{file_name}" in {resolution} resolution ({file_size_mb:.2f} MB), coming soon... 📲"""
-            send_message(chat_id, msg)
             send_video_or_link(chat_id, file_path, first_name, last_name)
         else:
             logger.error(f"Error in process_video_download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
