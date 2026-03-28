@@ -4,6 +4,8 @@ import subprocess
 import urllib3
 import boto3
 import zipfile
+import shutil
+import tempfile
 from botocore.exceptions import ClientError
 from botocore.config import Config
 from datetime import datetime
@@ -124,12 +126,13 @@ def get_message_history(chat_id, limit=25):
         return None
 
 
-def zip_file(file_path):
+def zip_file(file_path, target_dir=None):
     """
     Create a zip file from the downloaded video
     """
     file_name = os.path.basename(file_path)
-    zip_file_path = os.path.join(WORKING_DIR, f"{os.path.splitext(file_name)[0]}.zip")
+    zip_dir = target_dir or os.path.dirname(file_path) or WORKING_DIR
+    zip_file_path = os.path.join(zip_dir, f"{os.path.splitext(file_name)[0]}.zip")
 
     try:
         with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
@@ -217,7 +220,7 @@ def send_video_or_link(chat_id, file_path, first_name=None, last_name=None):
         if s3_key:
             file_url = generate_url(s3_key)
             if file_url:
-                msg = f"Here's your {media} (as a zip file) 🍿\n\n{file_url}"
+                msg = f"Here's your {media} (as a zip file) 🍿\n\n{file_name}\n{file_size_mb:.2f} MB\n\n{file_url}"
                 send_message(chat_id, msg)
                 logger.info(f"{media} uploaded to S3 and link sent to user")
             else:
@@ -232,10 +235,11 @@ def send_video_or_link(chat_id, file_path, first_name=None, last_name=None):
     os.remove(file_path)
 
 
-def download_video(url, resolution):
+def download_video(url, resolution, temp_dir=None):
     try:
-        cookie_file = os.path.join(WORKING_DIR, "cookie.txt")
-        output_path = os.path.join(WORKING_DIR, "%(title)s.%(ext)s")
+        working_dir = temp_dir or tempfile.mkdtemp(prefix="yt_dl_")
+        cookie_file = os.path.join(working_dir, "cookie.txt")
+        output_path = os.path.join(working_dir, "%(title)s.%(ext)s")
 
         s3 = boto3.client('s3')
         s3.download_file(S3_COOKIES_BUCKET_NAME, S3_COOKIES_KEY, cookie_file)
@@ -269,13 +273,13 @@ def download_video(url, resolution):
 
         if process.returncode == 0:
             if resolution == "mp3":
-                for file in os.listdir(WORKING_DIR):
+                for file in os.listdir(working_dir):
                     if file.endswith(".mp3"):
-                        return os.path.join(WORKING_DIR, file)
+                        return os.path.join(working_dir, file)
             else:
-                for file in os.listdir(WORKING_DIR):
+                for file in os.listdir(working_dir):
                     if file.endswith(".mp4"):
-                        return os.path.join(WORKING_DIR, file)
+                        return os.path.join(working_dir, file)
     except Exception as e:
         logger.error(f"Error in download_video: {str(e)}", exc_info=True)
         return None
@@ -396,17 +400,26 @@ def process_video_download(chat_id, url, resolution, first_name=None, last_name=
     logger.info(f"Starting video download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
 
     send_message(chat_id, "Download in progress, please wait... 🔄")
-    file_path = download_video(url, resolution)
+    temp_dir = tempfile.mkdtemp(prefix="yt_dl_")
 
-    if file_path:
-        file_name = os.path.basename(file_path)
-        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-        msg = f"""Sending "{file_name}" in {resolution} resolution ({file_size_mb:.2f} MB), coming soon... 📲"""
-        send_message(chat_id, msg)
-        send_video_or_link(chat_id, file_path, first_name, last_name)
-    else:
-        logger.error(f"Error in process_video_download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
-        send_cloudwatch_dl_error(chat_id)
+    try:
+        file_path = download_video(url, resolution, temp_dir=temp_dir)
+
+        if file_path:
+            file_name = os.path.basename(file_path)
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            msg = f"""Sending "{file_name}" in {resolution} resolution ({file_size_mb:.2f} MB), coming soon... 📲"""
+            send_message(chat_id, msg)
+            send_video_or_link(chat_id, file_path, first_name, last_name)
+        else:
+            logger.error(f"Error in process_video_download for chat_id: {chat_id}, url: {url}, resolution: {resolution}")
+            send_cloudwatch_dl_error(chat_id)
+    finally:
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"Cleaned up temp directory: {temp_dir}")
+        except Exception as e:
+            logger.error(f"Failed to clean up temp directory {temp_dir}: {e}")
 
 
 def invoke_lambda_async(payload):
@@ -514,15 +527,20 @@ def handle_test_command(chat_id):
     """
     TEST_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
     send_message(chat_id, "Running download test, please wait...")
+    temp_dir = tempfile.mkdtemp(prefix="yt_dl_test_")
     try:
-        file_path = download_video(TEST_URL, "low")
-        send_message(chat_id, f"✅ Test passed.")
+        file_path = download_video(TEST_URL, "low", temp_dir=temp_dir)
+        if file_path:
+            send_message(chat_id, f"✅ Test passed.")
+        else:
+            send_message(chat_id, f"❌ Test failed: download returned no file")
     except Exception as e:
         logger.error(f"Error in handle_test_command: {e}")
         send_message(chat_id, f"❌ Test failed: {str(e)}")
     finally:
         if 'file_path' in locals() and file_path and os.path.exists(file_path):
             os.remove(file_path)
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def handle_video_download(chat_id, message_text, first_name, last_name):
